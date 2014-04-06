@@ -35,6 +35,7 @@
 package scanner
 
 import (
+	"bufio"
 	"io"
 )
 
@@ -85,7 +86,7 @@ const (
 )
 
 type FFLexer struct {
-	reader        io.Reader
+	reader        *bufio.Reader
 	Token         FFTok
 	Error         FFErr
 	BigError      error
@@ -93,10 +94,6 @@ type FFLexer struct {
 	CurrentLine   int
 	CurrentChar   int
 	Output        []byte
-
-	unreadUsed bool
-	unread     byte
-	buf        []byte
 }
 
 func NewFFLexer(r io.Reader) *FFLexer {
@@ -104,71 +101,65 @@ func NewFFLexer(r io.Reader) *FFLexer {
 		Token:       FFTok_init,
 		Error:       FFErr_e_ok,
 		CurrentLine: 1,
-		buf:         make([]byte, 0, 0),
+		CurrentChar: 1,
+		reader:      bufio.NewReader(r),
 	}
 }
 
-func (ffl *FFLexer) readByte() byte {
-	var b byte
-
-	if ffl.unreadUsed {
-		ffl.CurrentChar++
-		ffl.CurrentOffset++
-		ffl.unreadUsed = false
-		return ffl.unread
-	}
-
-	if len(ffl.buf) != 0 {
-		b, ffl.buf = ffl.buf[len(ffl.buf)-1], ffl.buf[:len(ffl.buf)-1]
-		ffl.CurrentChar++
-		ffl.CurrentOffset++
-		return b
-	}
-
-	panic("Lexer went past end of buffers")
-}
-
-func (ffl *FFLexer) unreadByte(b byte) {
-	// TOOD(pquerna): fixme, this is ugly.
-	if ffl.unreadUsed {
-		panic("unread called twice.")
-	}
-
-	ffl.CurrentChar--
-	ffl.CurrentOffset--
-
-	ffl.unread = b
-	ffl.unreadUsed = true
-}
-
-func (ffl *FFLexer) empty() bool {
-	if ffl.unreadUsed || len(ffl.cur) != 0 || len(ffl.buf) != 0 {
-		return false
-	}
-	return true
-}
-
-func (ffl *FFLexer) gather() {
-	// TODO(pquerna): how big, benchmark
-	var tmp []byte = make([]byte, 0, 128)
-
-	n, err := ffl.reader.Read(tmp)
-
-	if n == 0 && err == io.EOF {
-		ffl.Token = FFTok_eof
-	} else if err != nil {
-		ffl.Token = FFTok_error
+func (ffl *FFLexer) readByte() (byte, error) {
+	c, err := ffl.reader.ReadByte()
+	if err != nil {
 		ffl.Error = FFErr_io
 		ffl.BigError = err
-	} else {
-		// TODO: make a better array of []byte structures.
-		ffl.buf = append(ffl.buf, tmp...)
-		ffl.Token = FFTok_init
+		return 0, err
 	}
+
+	ffl.CurrentOffset++
+
+	return c, nil
+}
+
+func (ffl *FFLexer) unreadByte() error {
+	err := ffl.reader.UnreadByte()
+	if err != nil {
+		ffl.Error = FFErr_io
+		ffl.BigError = err
+		return err
+	}
+
+	ffl.CurrentOffset--
+	return nil
 }
 
 func (ffl *FFLexer) wantBytes(want []byte, iftrue FFTok) FFTok {
 	for _, b := range want {
+		c, err := ffl.readByte()
+
+		if err != nil {
+			return FFTok_error
+		}
+
+		if c != b {
+			err = ffl.reader.UnreadByte()
+
+			if err != nil {
+				return FFTok_error
+			}
+
+			ffl.Error = FFErr_invalid_string
+			return FFTok_error
+		}
+
+		// TODO: bytes.buffer? FIX THIS. rethink this.
+		ffl.Output = append(ffl.Output, c)
+	}
+
+	return iftrue
+}
+
+func (ffl *FFLexer) lexString() FFTok {
+	mask := IJC | NFP
+	for {
 		if ffl.empty() {
 			ffl.gather()
 			if ffl.Token != FFTok_init {
@@ -177,21 +168,11 @@ func (ffl *FFLexer) wantBytes(want []byte, iftrue FFTok) FFTok {
 		}
 
 		c := ffl.readByte()
-		if c != b {
-			ffl.unreadByte(c)
-			ffl.Error = FFErr_invalid_string
-			return FFTok_error
+		if charLookupTable[c] & mask {
+			ffl.Output = append(ffl.Output, c)
+			continue
 		}
-
-		// TODO: bytes.buffer? rethink this.
-		ffl.Output = append(ffl.Output, c)
 	}
-
-	return iftrue
-}
-
-func (ffl *FFLexer) lexString() FFTok {
-
 }
 
 var true_bytes = []byte{'r', 'u', 'e'}
