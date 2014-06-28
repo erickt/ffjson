@@ -194,6 +194,7 @@ func (ffl *FFLexer) lexString() FFTok {
 }
 
 func (ffl *FFLexer) lexNumber() FFTok {
+	var numRead int = 0
 	tok := FFTok_integer
 
 	c, err := ffl.readByte()
@@ -219,15 +220,11 @@ func (ffl *FFLexer) lexNumber() FFTok {
 		}
 	} else if c >= '1' && c <= '9' {
 		ffl.Output = append(ffl.Output, c)
-		for {
-			if c >= '0' && c <= '9' {
-				c, err = ffl.readByte()
-				if err != nil {
-					return FFTok_error
-				}
-				ffl.Output = append(ffl.Output, c)
-			} else {
-				break
+		for c >= '0' && c <= '9' {
+			ffl.Output = append(ffl.Output, c)
+			c, err = ffl.readByte()
+			if err != nil {
+				return FFTok_error
 			}
 		}
 	} else {
@@ -241,8 +238,7 @@ func (ffl *FFLexer) lexNumber() FFTok {
 	}
 
 	if c == '.' {
-		// TODO(pquerna): handle floats
-		var numRead int = 0
+		numRead = 0
 		ffl.Output = append(ffl.Output, c)
 		c, err = ffl.readByte()
 		if err != nil {
@@ -250,8 +246,8 @@ func (ffl *FFLexer) lexNumber() FFTok {
 		}
 
 		for c >= '0' && c <= '9' {
-			numRead++
 			ffl.Output = append(ffl.Output, c)
+			numRead++
 			c, err = ffl.readByte()
 			if err != nil {
 				return FFTok_error
@@ -265,6 +261,41 @@ func (ffl *FFLexer) lexNumber() FFTok {
 			}
 
 			// yajl_lex_missing_integer_after_decimal
+			return FFTok_error
+		}
+
+		tok = FFTok_double
+	}
+
+	/* optional exponent (indicates this is floating point) */
+	if c == 'e' || c == 'E' {
+		numRead = 0
+		ffl.Output = append(ffl.Output, c)
+
+		c, err = ffl.readByte()
+		if err != nil {
+			return FFTok_error
+		}
+
+		/* optional sign */
+		if c == '+' || c == '-' {
+			c, err = ffl.readByte()
+			if err != nil {
+				return FFTok_error
+			}
+		}
+
+		for c >= '0' && c <= '9' {
+			ffl.Output = append(ffl.Output, c)
+			numRead++
+			c, err = ffl.readByte()
+			if err != nil {
+				return FFTok_error
+			}
+		}
+
+		if numRead == 0 {
+			// yajl_lex_missing_integer_after_exponent;
 			return FFTok_error
 		}
 

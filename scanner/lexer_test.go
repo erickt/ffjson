@@ -85,4 +85,26 @@ func TestHelloWorld(t *testing.T) {
 		FFTok_right_bracket,
 		FFTok_eof,
 	}, toks)
+
+	ffl = NewFFLexer(bytes.NewBufferString(`{"hello": 1.0}`))
+	toks = scanAll(ffl)
+	assertTokensEqual(t, []FFTok{
+		FFTok_left_bracket,
+		FFTok_string,
+		FFTok_colon,
+		FFTok_double,
+		FFTok_right_bracket,
+		FFTok_eof,
+	}, toks)
+
+	ffl = NewFFLexer(bytes.NewBufferString(`{"hello": 1e2}`))
+	toks = scanAll(ffl)
+	assertTokensEqual(t, []FFTok{
+		FFTok_left_bracket,
+		FFTok_string,
+		FFTok_colon,
+		FFTok_double,
+		FFTok_right_bracket,
+		FFTok_eof,
+	}, toks)
 }
