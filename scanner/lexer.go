@@ -36,6 +36,7 @@ package scanner
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 )
 
@@ -107,6 +108,16 @@ func NewFFLexer(r io.Reader) *FFLexer {
 }
 
 func (ffl *FFLexer) readByte() (byte, error) {
+
+	/*
+		if ffl.empty() {
+			ffl.gather()
+			if ffl.Token != FFTok_init {
+				goto lexed
+			}
+		}
+	*/
+
 	c, err := ffl.reader.ReadByte()
 	if err != nil {
 		ffl.Error = FFErr_io
@@ -160,19 +171,112 @@ func (ffl *FFLexer) wantBytes(want []byte, iftrue FFTok) FFTok {
 func (ffl *FFLexer) lexString() FFTok {
 	mask := IJC | NFP
 	for {
-		if ffl.empty() {
-			ffl.gather()
-			if ffl.Token != FFTok_init {
-				return ffl.Token
-			}
+		c, err := ffl.readByte()
+		if err != nil {
+			return FFTok_error
 		}
 
-		c := ffl.readByte()
-		if charLookupTable[c] & mask {
+		if charLookupTable[c]&mask == 0 {
 			ffl.Output = append(ffl.Output, c)
 			continue
 		}
+
+		if c == '"' {
+			return FFTok_string
+		}
+
+		// TODO(pquerna): rest of string parsing.
+		fmt.Printf("FFTok_error lexString char=%d\n", c)
+		return FFTok_error
 	}
+
+	return FFTok_error
+}
+
+func (ffl *FFLexer) lexNumber() FFTok {
+	tok := FFTok_integer
+
+	c, err := ffl.readByte()
+	if err != nil {
+		return FFTok_error
+	}
+
+	/* optional leading minus */
+	if c == '-' {
+		ffl.Output = append(ffl.Output, c)
+		c, err = ffl.readByte()
+		if err != nil {
+			return FFTok_error
+		}
+	}
+
+	/* a single zero, or a series of integers */
+	if c == '0' {
+		ffl.Output = append(ffl.Output, c)
+		c, err = ffl.readByte()
+		if err != nil {
+			return FFTok_error
+		}
+	} else if c >= '1' && c <= '9' {
+		ffl.Output = append(ffl.Output, c)
+		for {
+			if c >= '0' && c <= '9' {
+				c, err = ffl.readByte()
+				if err != nil {
+					return FFTok_error
+				}
+				ffl.Output = append(ffl.Output, c)
+			} else {
+				break
+			}
+		}
+	} else {
+		err = ffl.unreadByte()
+		if err != nil {
+			return FFTok_error
+		}
+
+		// yajl_lex_missing_integer_after_minus
+		return FFTok_error
+	}
+
+	if c == '.' {
+		// TODO(pquerna): handle floats
+		var numRead int = 0
+		ffl.Output = append(ffl.Output, c)
+		c, err = ffl.readByte()
+		if err != nil {
+			return FFTok_error
+		}
+
+		for c >= '0' && c <= '9' {
+			numRead++
+			ffl.Output = append(ffl.Output, c)
+			c, err = ffl.readByte()
+			if err != nil {
+				return FFTok_error
+			}
+		}
+
+		if numRead == 0 {
+			err = ffl.unreadByte()
+			if err != nil {
+				return FFTok_error
+			}
+
+			// yajl_lex_missing_integer_after_decimal
+			return FFTok_error
+		}
+
+		tok = FFTok_double
+	}
+
+	err = ffl.unreadByte()
+	if err != nil {
+		return FFTok_error
+	}
+
+	return tok
 }
 
 var true_bytes = []byte{'r', 'u', 'e'}
@@ -181,23 +285,23 @@ var null_bytes = []byte{'u', 'l', 'l'}
 
 func (ffl *FFLexer) Scan() FFTok {
 	tok := FFTok_error
-	var c byte
 	var startOffset = 0
 	ffl.Output = make([]byte, 0, 0)
 	ffl.Token = FFTok_init
 
 	for {
-		if ffl.empty() {
-			ffl.gather()
-			if ffl.Token != FFTok_init {
-				goto lexed
+		c, err := ffl.readByte()
+		if err != nil {
+			if err == io.EOF {
+				return FFTok_eof
+			} else {
+				return FFTok_error
 			}
 		}
 
-		c = ffl.readByte()
 		switch c {
 		case '{':
-			tok = FFTok_left_brace
+			tok = FFTok_left_bracket
 			goto lexed
 		case '}':
 			tok = FFTok_right_bracket
@@ -233,7 +337,11 @@ func (ffl *FFLexer) Scan() FFTok {
 			tok = ffl.lexString()
 			goto lexed
 		case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			//tok = ffl.lexNumber()
+			err = ffl.unreadByte()
+			if err != nil {
+				return FFTok_error
+			}
+			tok = ffl.lexNumber()
 			goto lexed
 		case '/':
 			//tok = ffl.lexComent()
