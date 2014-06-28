@@ -233,7 +233,7 @@ func (ffl *FFLexer) lexNumber() FFTok {
 			return FFTok_error
 		}
 
-		// yajl_lex_missing_integer_after_minus
+		ffl.Error = FFErr_missing_integer_after_minus
 		return FFTok_error
 	}
 
@@ -260,7 +260,7 @@ func (ffl *FFLexer) lexNumber() FFTok {
 				return FFTok_error
 			}
 
-			// yajl_lex_missing_integer_after_decimal
+			ffl.Error = FFErr_missing_integer_after_decimal
 			return FFTok_error
 		}
 
@@ -295,7 +295,7 @@ func (ffl *FFLexer) lexNumber() FFTok {
 		}
 
 		if numRead == 0 {
-			// yajl_lex_missing_integer_after_exponent;
+			ffl.Error = FFErr_missing_integer_after_exponent
 			return FFTok_error
 		}
 
