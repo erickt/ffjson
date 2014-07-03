@@ -111,32 +111,56 @@ func getGetInnerValue(ic *Inception, name string, typ reflect.Type) string {
 	case reflect.Array,
 		reflect.Slice:
 		out += "if " + name + "!= nil {" + "\n"
-		out += "buf.WriteString(`[`)" + "\n"
-		out += "for i, v := range " + name + "{" + "\n"
-		out += "if i != 0 {" + "\n"
-		out += "buf.WriteString(`,`)" + "\n"
-		out += "}" + "\n"
+		out += "  _, err = buf.WriteString(`[`)" + "\n"
+		out += "  if err != nil {" + "\n"
+		out += "    return err" + "\n"
+		out += "  }" + "\n"
+		out += "  for i, v := range " + name + "{" + "\n"
+		out += "    if i != 0 {" + "\n"
+		out += "      _, err = buf.WriteString(`,`)" + "\n"
+		out += "      if err != nil {" + "\n"
+		out += "        return err" + "\n"
+		out += "      }" + "\n"
+		out += "    }" + "\n"
 		out += getGetInnerValue(ic, "v", typ.Elem())
-		out += "}" + "\n"
-		out += "buf.WriteString(`]`)" + "\n"
+		out += "  }" + "\n"
+		out += "  _, err = buf.WriteString(`]`)" + "\n"
+		out += "  if err != nil {" + "\n"
+		out += "    return err" + "\n"
+		out += "  }" + "\n"
 		out += "} else {" + "\n"
-		out += "buf.WriteString(`null`)" + "\n"
+		out += "  _, err = buf.WriteString(`null`)" + "\n"
+		out += "  if err != nil {" + "\n"
+		out += "    return err" + "\n"
+		out += "  }" + "\n"
 		out += "}" + "\n"
 	case reflect.String:
 		ic.OutputPills[pills.Pill_WriteJsonString] = true
-		out += "ffjson_WriteJsonString(buf, " + name + ")" + "\n"
+		out += "err = ffjson_WriteJsonString(buf, " + name + ")" + "\n"
+		out += "if err != nil {" + "\n"
+		out += "  return err" + "\n"
+		out += "}" + "\n"
 	case reflect.Ptr,
 		reflect.Interface:
 		out += "if " + name + "!= nil {" + "\n"
 		out += getGetInnerValue(ic, name, typ.Elem())
 		out += "} else {" + "\n"
-		out += "buf.WriteString(`null`)" + "\n"
+		out += "  _, err = buf.WriteString(`null`)" + "\n"
+		out += "  if err != nil {" + "\n"
+		out += "    return err" + "\n"
+		out += "  }" + "\n"
 		out += "}" + "\n"
 	case reflect.Bool:
 		out += "if " + name + " {" + "\n"
-		out += "buf.WriteString(`true`)" + "\n"
+		out += "  _, err = buf.WriteString(`true`)" + "\n"
+		out += "  if err != nil {" + "\n"
+		out += "    return err" + "\n"
+		out += "  }" + "\n"
 		out += "} else {" + "\n"
-		out += "buf.WriteString(`false`)" + "\n"
+		out += "  _, err = buf.WriteString(`false`)" + "\n"
+		out += "  if err != nil {" + "\n"
+		out += "    return err" + "\n"
+		out += "  }" + "\n"
 		out += "}" + "\n"
 	default:
 		ic.OutputImports[`"encoding/json"`] = true
@@ -145,7 +169,10 @@ func getGetInnerValue(ic *Inception, name string, typ reflect.Type) string {
 		out += "if err != nil {" + "\n"
 		out += "  return err" + "\n"
 		out += "}" + "\n"
-		out += "buf.Write(obj)" + "\n"
+		out += "_, err = buf.Write(obj)" + "\n"
+		out += "if err != nil {" + "\n"
+		out += "  return err" + "\n"
+		out += "}" + "\n"
 	}
 	return out
 }
@@ -176,7 +203,10 @@ func CreateMarshalJSON(ic *Inception, si *StructInfo) error {
 	out += `_ = obj` + "\n"
 	out += `_ = err` + "\n"
 	out += `_ = first` + "\n"
-	out += "buf.WriteString(`{`)" + "\n"
+	out += "_, err = buf.WriteString(`{`)" + "\n"
+  out += "if err != nil {" + "\n"
+	out += "  return err" + "\n"
+	out += "}" + "\n"
 
 	for _, f := range si.Fields {
 		if f.JsonName == "-" {
@@ -188,20 +218,29 @@ func CreateMarshalJSON(ic *Inception, si *StructInfo) error {
 		}
 
 		out += "if first == true {" + "\n"
-		out += "first = false" + "\n"
+		out += "  first = false" + "\n"
 		out += "} else {" + "\n"
-		out += "buf.WriteString(`,`)" + "\n"
+		out += "  _, err = buf.WriteString(`,`)" + "\n"
+    out += "  if err != nil {" + "\n"
+	  out += "    return err" + "\n"
+	  out += "  }" + "\n"
 		out += "}" + "\n"
 
 		// JsonName is already escaped and quoted.
-		out += "buf.WriteString(`" + f.JsonName + ":`)" + "\n"
+		out += "_, err = buf.WriteString(`" + f.JsonName + ":`)" + "\n"
+    out += "if err != nil {" + "\n"
+	  out += "  return err" + "\n"
+	  out += "}" + "\n"
 		out += getValue(ic, f)
 		if f.OmitEmpty {
 			out += "}" + "\n"
 		}
 	}
 
-	out += "buf.WriteString(`}`)" + "\n"
+	out += "_, err = buf.WriteString(`}`)" + "\n"
+  out += "if err != nil {" + "\n"
+	out += "  return err" + "\n"
+	out += "}" + "\n"
 	out += `return nil` + "\n"
 	out += `}` + "\n"
 	ic.OutputFuncs = append(ic.OutputFuncs, out)

@@ -30,10 +30,13 @@ import (
 /**
  * Function ported from encoding/json: func (e *encodeState) string(s string) (int, error)
  */
-func WriteJsonString(buf *bytes.Buffer, s string) {
+func WriteJsonString(buf *bytes.Buffer, s string) error {
 	const hex = "0123456789abcdef"
 
-	buf.WriteByte('"')
+	err := buf.WriteByte('"')
+  if err != nil {
+		return err
+	}
 	start := 0
 	for i := 0; i < len(s); {
 		if b := s[i]; b < utf8.RuneSelf {
@@ -42,26 +45,57 @@ func WriteJsonString(buf *bytes.Buffer, s string) {
 				continue
 			}
 			if start < i {
-				buf.WriteString(s[start:i])
+				_, err = buf.WriteString(s[start:i])
+				if err != nil {
+					return err
+				}
 			}
 			switch b {
 			case '\\', '"':
-				buf.WriteByte('\\')
-				buf.WriteByte(b)
+				err = buf.WriteByte('\\')
+				if err != nil {
+					return err
+				}
+
+				err = buf.WriteByte(b)
+				if err != nil {
+					return err
+				}
 			case '\n':
-				buf.WriteByte('\\')
-				buf.WriteByte('n')
+				err = buf.WriteByte('\\')
+				if err != nil {
+					return err
+				}
+				err = buf.WriteByte('n')
+				if err != nil {
+					return err
+				}
 			case '\r':
-				buf.WriteByte('\\')
-				buf.WriteByte('r')
+				err = buf.WriteByte('\\')
+				if err != nil {
+					return err
+				}
+				err = buf.WriteByte('r')
+				if err != nil {
+					return err
+				}
 			default:
 				// This encodes bytes < 0x20 except for \n and \r,
 				// as well as < and >. The latter are escaped because they
 				// can lead to security holes when user-controlled strings
 				// are rendered into JSON and served to some browsers.
-				buf.WriteString(`\u00`)
-				buf.WriteByte(hex[b>>4])
-				buf.WriteByte(hex[b&0xF])
+				_, err = buf.WriteString(`\u00`)
+				if err != nil {
+					return err
+				}
+				err = buf.WriteByte(hex[b>>4])
+				if err != nil {
+					return err
+				}
+				err = buf.WriteByte(hex[b&0xF])
+				if err != nil {
+					return err
+				}
 			}
 			i++
 			start = i
@@ -70,9 +104,15 @@ func WriteJsonString(buf *bytes.Buffer, s string) {
 		c, size := utf8.DecodeRuneInString(s[i:])
 		if c == utf8.RuneError && size == 1 {
 			if start < i {
-				buf.WriteString(s[start:i])
+				_, err = buf.WriteString(s[start:i])
+				if err != nil {
+					return err
+				}
 			}
-			buf.WriteString(`\ufffd`)
+			_, err = buf.WriteString(`\ufffd`)
+			if err != nil {
+				return err
+			}
 			i += size
 			start = i
 			continue
@@ -86,10 +126,19 @@ func WriteJsonString(buf *bytes.Buffer, s string) {
 		// See http://timelessrepo.com/json-isnt-a-javascript-subset for discussion.
 		if c == '\u2028' || c == '\u2029' {
 			if start < i {
-				buf.WriteString(s[start:i])
+				_, err = buf.WriteString(s[start:i])
+				if err != nil {
+					return err
+				}
 			}
-			buf.WriteString(`\u202`)
-			buf.WriteByte(hex[c&0xF])
+			_, err = buf.WriteString(`\u202`)
+			if err != nil {
+				return err
+			}
+			err = buf.WriteByte(hex[c&0xF])
+			if err != nil {
+				return err
+			}
 			i += size
 			start = i
 			continue
@@ -97,7 +146,14 @@ func WriteJsonString(buf *bytes.Buffer, s string) {
 		i += size
 	}
 	if start < len(s) {
-		buf.WriteString(s[start:])
+		_, err = buf.WriteString(s[start:])
+		if err != nil {
+			return err
+		}
 	}
-	buf.WriteByte('"')
+	err = buf.WriteByte('"')
+	if err != nil {
+		return err
+	}
+	return nil
 }

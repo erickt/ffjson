@@ -32,7 +32,7 @@ import (
 // returned as the first result value; otherwise the string is returned
 // as the second result value.
 //
-func FormatBits(dst *bytes.Buffer, u uint64, base int, neg bool) {
+func FormatBits(dst *bytes.Buffer, u uint64, base int, neg bool) error {
 	const (
 		digits   = "0123456789abcdefghijklmnopqrstuvwxyz"
 		digits01 = "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"
@@ -109,7 +109,9 @@ func FormatBits(dst *bytes.Buffer, u uint64, base int, neg bool) {
 		a[i] = '-'
 	}
 
-	dst.Write(a[i:])
-
-	return
+	_, err := dst.Write(a[i:])
+	if err != nil {
+		return err
+	}
+	return nil
 }
